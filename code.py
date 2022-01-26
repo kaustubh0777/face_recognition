@@ -1,54 +1,85 @@
-from importlib.resources import path
+#importing python libraries and packages
+
 import cv2
 import numpy as np
 import face_recognition
 import os
-from datetime import datetime   
+from datetime import datetime
 
-path='images'
-images=[]
-person_name=[]
-mylist=os.listdir(path)
-print(mylist)
+"""
+Creating a list of images with their names 
+"""
+path = 'images'
+images = []
+personNames = []
+myList = os.listdir(path)
+print(myList)
+for cu_img in myList:
+    current_Img = cv2.imread(f'{path}/{cu_img}')
+    images.append(current_Img)
+    personNames.append(os.path.splitext(cu_img)[0])
+print(personNames)
 
-for i in mylist:
-    curr=cv2.imread(f'{path}/{i}')
-    images.append(curr)
-    person_name.append(os.path.splitext(i)[0])
-print(person_name)
+#return encoded list of images 
 
-
-def faceencoding(images):
-    en_list=[]
-     
+def faceEncodings(images):
+    encodeList = []
     for img in images:
-        img=cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
-        encode=face_recognition.face_encodings(img)[0]
-        en_list.append(encode)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        encode = face_recognition.face_encodings(img)[0]
+        encodeList.append(encode)
+    return encodeList
 
-    return en_list;
+#writes the attendance of the person in the form of name,date and time
+def attendance(name):
+    with open('Attendance.csv', 'r+') as f:
+        myDataList = f.readlines()
+        nameList = []
+        for line in myDataList:
+            entry = line.split(',')
+            nameList.append(entry[0])
+        if name not in nameList:
+            time_now = datetime.now()
+            tStr = time_now.strftime('%H:%M:%S')
+            dStr = time_now.strftime('%d/%m/%Y')
+            f.writelines(f'\n{name},{tStr},{dStr}')
+
+#Displayes Encodings Complete once all the images are encoded 
+encodeListKnown = faceEncodings(images)
+print('All Encodings Complete!!!')
 
 
-encodelistdone=faceencoding(images)
-print("Encodings Done")
-
-
-cap=cv2.VideoCapture(0)
+#infinite loop to capture the video 
+cap = cv2.VideoCapture(-1)
 
 while True:
-    ret,frame=cap.read()
-    faces=cv2.resize(frame,(0,0),None,0.25,0.25)
-    faces=cv2.cvtColor(faces,cv2.COLOR_BGR2RGB)
+    ret, frame = cap.read()
+    faces = cv2.resize(frame, (0, 0), None, 0.25, 0.25)
+    faces = cv2.cvtColor(faces, cv2.COLOR_BGR2RGB)
 
-    
-    facescurrentframe=face_recognition.face_locations(faces)
-    encodescurrentframe=face_recognition.face_encodings(faces,facescurrentframe)
+    facesCurrentFrame = face_recognition.face_locations(faces)
+    encodesCurrentFrame = face_recognition.face_encodings(faces, facesCurrentFrame)
 
-    for encodeface,faceloc in zip(encodescurrentframe,facescurrentframe):
-        matches=face_recognition.compare_faces(encodelistdone,encodeface)
-        facedist=face_recognition.face_distance(encodelistdone,encodeface)
+    for encodeFace, faceLoc in zip(encodesCurrentFrame, facesCurrentFrame):
+        matches = face_recognition.compare_faces(encodeListKnown, encodeFace)
+        faceDis = face_recognition.face_distance(encodeListKnown, encodeFace)
+        # print(faceDis)
+        matchIndex = np.argmin(faceDis)
 
-        
+        if matches[matchIndex]:
+            name = personNames[matchIndex].upper()
+            # print(name)
+            y1, x2, y2, x1 = faceLoc
+            y1, x2, y2, x1 = y1 * 4, x2 * 4, y2 * 4, x1 * 4
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.rectangle(frame, (x1, y2 - 35), (x2, y2), (0, 255, 0), cv2.FILLED)
+            cv2.putText(frame, name, (x1 + 6, y2 - 6), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)
+            attendance(name)
 
-
-
+#closes the webcam when the enter key is pressed (Enter=13)
+    cv2.imshow('Webcam', frame)
+    if cv2.waitKey(1) == 13:
+        break
+#releases the camera and destroyes all windows
+cap.release()
+cv2.destroyAllWindows()
